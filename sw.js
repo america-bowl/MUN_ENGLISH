@@ -41,11 +41,16 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+
 // 3. 通信（Fetch）処理
 self.addEventListener('fetch', (event) => {
+  // /api/ へのリクエストはキャッシュせず常にネットワークへ送る
+  if (event.request.url.includes('/api/')) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      // キャッシュにあればそれを返し、無ければネットワークから取得
       return cachedResponse || fetch(event.request);
     })
   );
