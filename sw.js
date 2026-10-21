@@ -1,8 +1,5 @@
-
-// アプリの画面やプログラムを更新した時は、この 'v(n)' を 'v(n+1)'に変更する
-const CACHE_NAME = 'mun-english-v(1)';
-
-// オフライン保存するファイルリスト
+// Bump this cache name whenever the app shell changes.
+const CACHE_NAME = 'mun-english-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -11,47 +8,44 @@ const ASSETS_TO_CACHE = [
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js'
 ];
 
-// 1. インストール処理
 self.addEventListener('install', (event) => {
-  // 新しいSWがきたら待機せずにすぐ有効化する
-  self.skipWaiting();
-  
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    try {
+      await cache.addAll(ASSETS_TO_CACHE);
+    } catch (error) {
+      // A CDN outage should not prevent the offline app shell from being installed.
+      console.warn('Some optional assets could not be cached:', error);
+      await cache.addAll(['./', './index.html', './manifest.json']);
+    }
+    await self.skipWaiting();
+  })());
 });
 
-// 2. 有効化処理（古いキャッシュの削除）
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          // 現在の CACHE_NAME 以外の古いキャッシュを削除
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
-      );
-    })
-  );
-  // 開いている全タブをすぐに新しいService Workerの制御下に置く
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key.startsWith('mun-english-') && key !== CACHE_NAME).map((key) => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
 
-
-// 3. 通信（Fetch）処理
 self.addEventListener('fetch', (event) => {
-  // /api/ へのリクエストはキャッシュせず常にネットワークへ送る
-  if (event.request.url.includes('/api/')) {
-    return;
-  }
-
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request);
-    })
-  );
+  if (event.request.method !== 'GET' || new URL(event.request.url).pathname.includes('/api/')) return;
+  event.respondWith((async () => {
+    const cached = await caches.match(event.request);
+    if (cached) return cached;
+    try {
+      const response = await fetch(event.request);
+      if (response.ok && new URL(event.request.url).origin === self.location.origin) {
+        const cache = await caches.open(CACHE_NAME);
+        cache.put(event.request, response.clone());
+      }
+      return response;
+    } catch (error) {
+      const fallback = await caches.match('./index.html');
+      if (fallback && event.request.mode === 'navigate') return fallback;
+      throw error;
+    }
+  })());
 });
