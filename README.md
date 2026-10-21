@@ -1,2 +1,1 @@
-# MUN_ENGLISH
-development of a flexible vocabulary builder dedicated for MUN
+Your MUN dedicated vocabulary builder is here.
