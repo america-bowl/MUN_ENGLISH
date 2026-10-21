@@ -747,3 +747,98 @@ document.addEventListener('keydown', (e) => {
 // Initialization
 updateCard();
 renderCheatSheet();
+import React, { useState, useEffect } from 'react';
+
+export default function App() {
+  const [words, setWords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newWord, setNewWord] = useState('');
+  const [newMeaning, setNewMeaning] = useState('');
+
+  // 1. 初回ロード時に API から単語データを取り出す (GET)
+  useEffect(() => {
+    fetchWords();
+  }, []);
+
+  const fetchWords = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/words');
+      const result = await res.json();
+      if (result.success) {
+        setWords(result.data);
+      }
+    } catch (error) {
+      console.error('データの取得に失敗しました:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 2. ユーザーが単語を追加した時に API へ送信する (POST)
+  const handleAddWord = async (e) => {
+    e.preventDefault();
+    if (!newWord || !newMeaning) return;
+
+    try {
+      const res = await fetch('/api/words', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          word: newWord,
+          meaning: newMeaning,
+          tags: ['User Added']
+        }),
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        // 画面のリストを更新
+        setWords([...words, result.data]);
+        setNewWord('');
+        setNewMeaning('');
+      }
+    } catch (error) {
+      console.error('単語の追加に失敗しました:', error);
+    }
+  };
+
+  if (loading) return <div>読み込み中...</div>;
+
+  return (
+    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
+      <h1>MUN 単語帳 & テスト</h1>
+
+      {/* 単語追加フォーム */}
+      <form onSubmit={handleAddWord} style={{ marginBottom: '20px' }}>
+        <input
+          type="text"
+          placeholder="英単語 (例: Motion)"
+          value={newWord}
+          onChange={(e) => setNewWord(e.target.value)}
+          style={{ marginRight: '10px', padding: '8px' }}
+        />
+        <input
+          type="text"
+          placeholder="意味 (例: 動議)"
+          value={newMeaning}
+          onChange={(e) => setNewMeaning(e.target.value)}
+          style={{ marginRight: '10px', padding: '8px' }}
+        />
+        <button type="submit" style={{ padding: '8px 16px' }}>追加</button>
+      </form>
+
+      {/* 単語一覧表示 */}
+      <h2>登録済み単語一覧 ({words.length}件)</h2>
+      <ul>
+        {words.map((item) => (
+          <li key={item.id} style={{ marginBottom: '8px' }}>
+            <strong>{item.word}</strong>: {item.meaning}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
