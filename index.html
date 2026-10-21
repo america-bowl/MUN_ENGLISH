@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JEIMUN Master Vocabulary</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+<!-- 外部のCSSファイルを読み込む -->
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="brand">🌍 JEIMUN</div>
+    <div class="nav-menu" id="navMenu">
+        <div class="nav-item active" data-type="view" onclick="switchView('flashcards', this)">📚 Flashcards</div>
+        <div class="nav-item" data-type="view" onclick="switchView('dictionary', this)">🔍 Dictionary</div>
+        <div class="nav-item" data-type="view" onclick="switchView('cheatsheet', this)">📄 Cheat Sheet</div>
+        <div style="margin: 20px 0 10px 16px; font-size: 12px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Categories</div>
+        <div class="nav-item category-item active" onclick="selectCategory('All', this)">📁 All Categories</div>
+        <!-- Categories injected here -->
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="header">
+        <div class="header-title" id="headerTitle">Flashcards - All Categories</div>
+    </div>
+
+    <!-- FLASHCARD VIEW -->
+    <div id="flashcardsView" class="view-section active">
+        <div class="flashcard-tools">
+            <div class="tool-group">
+                <select id="langMode" class="select-dropdown" onchange="updateCard()">
+                    <option value="en-ja">Front: English ➔ Back: Japanese</option>
+                    <option value="ja-en">Front: Japanese ➔ Back: English</option>
+                </select>
+            </div>
+            <div class="tool-group">
+                <button class="btn" onclick="shuffleCards()">🔀 Shuffle</button>
+            </div>
+        </div>
+
+        <div class="flashcard-container" onclick="flipCard()">
+            <div class="flashcard" id="flashcard">
+                <div class="flashcard-face card-front">
+                    <div id="card-front" class="card-word">Loading...</div>
+                    <div id="card-cat-front" class="card-cat">Category</div>
+                </div>
+                <div class="flashcard-face flashcard-back">
+                    <div id="card-back" class="card-meaning">Loading...</div>
+                    <div id="card-cat-back" class="card-cat">Category</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-nav">
+            <button class="btn" onclick="prevCard()">◀ Prev</button>
+            <div class="progress-text" id="progressText">1 / 0</div>
+            <button class="btn btn-primary" onclick="nextCard()">Next ▶</button>
+        </div>
+        <div class="keyboard-hint">Space to flip • Left/Right arrows to navigate</div>
+    </div>
+
+    <!-- DICTIONARY VIEW -->
+    <div id="dictionaryView" class="view-section">
+        <input type="text" id="searchInput" class="search-bar" placeholder="Search in English or Japanese..." onkeyup="renderDictionary()">
+        <div class="dictionary-grid" id="dictGrid"></div>
+    </div>
+
+    <!-- CHEAT SHEET VIEW -->
+    <div id="cheatsheetView" class="view-section" style="align-items: flex-start;">
+        <div class="flashcard-tools" style="max-width: 1000px; width: 100%; margin-bottom: 10px;">
+            <div class="tool-group">
+                <p style="color: var(--text-light); font-weight: 600;">Scroll to view all. Use the Print button to save as PDF or hand out to students.</p>
+            </div>
+            <div class="tool-group">
+                <button class="btn btn-primary" onclick="window.print()">🖨️ Print Cheat Sheet</button>
+            </div>
+        </div>
+        <div class="table-container">
+            <table class="cheat-sheet-table">
+                <thead>
+                    <tr>
+                        <th style="width: 35%;">English</th>
+                        <th style="width: 40%;">Japanese</th>
+                        <th style="width: 25%;">Category</th>
+                    </tr>
+                </thead>
+                <tbody id="cheatSheetBody">
+                    <!-- Table rows injected here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 外部のJavaScriptファイルを読み込む -->
+<script src="script.js"></script>
+</body>
+</html>
