@@ -1,5 +1,5 @@
 // Bump this cache name whenever the app shell changes.
-const CACHE_NAME = 'mun-english-v2';
+const CACHE_NAME = 'mun-english-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
