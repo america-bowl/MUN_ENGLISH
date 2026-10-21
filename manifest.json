@@ -1,0 +1,20 @@
+{
+  "name": "MUN ENGLISH - 単語帳＆チートシート",
+  "short_name": "MUN ENGLISH",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#4a90e2",
+  "icons": [
+    {
+      "src": "https://via.placeholder.com/192/4a90e2/ffffff?text=MUN",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://via.placeholder.com/512/4a90e2/ffffff?text=MUN",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
