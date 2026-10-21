@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MUN ENGLISH - オフライン単語帳＆資料解析</title>
+    <title>MUN ENGLISH - オフライン単語帳＆AI解析</title>
     <link rel="manifest" href="manifest.json">
     <!-- PDF.js ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -24,7 +24,7 @@
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 15px; }
         .card { background: var(--card-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); position: relative; }
         .card-term { font-size: 18px; font-weight: bold; color: var(--primary-color); margin-bottom: 5px; }
-        .card-meaning { font-size: 14px; margin-bottom: 10px; }
+        .card-meaning { font-size: 14px; margin-bottom: 10px; white-space: pre-wrap; }
         .card-source { font-size: 11px; color: #888; }
         .delete-btn { position: absolute; top: 10px; right: 10px; background: #e74c3c; color: white; border: none; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-size: 12px; }
         input[type="file"] { display: none; }
@@ -36,14 +36,14 @@
 <div class="container">
     <header>
         <h1>📚 MUN ENGLISH</h1>
-        <p>資料からつくる オフライン単語帳</p>
+        <p>資料からつくる AI ＆ オフライン単語帳</p>
     </header>
 
     <!-- 操作パネル -->
     <div class="panel">
-        <h3>1. 資料 (PDF) から取り込み</h3>
-        <label class="file-label">
-            📄 PDFファイルを選択
+        <h3>1. 資料 (PDF) からAIで自動生成</h3>
+        <label class="file-label" style="background: #8e44ad;">
+            🤖 AIでPDF解析・単語帳作成
             <input type="file" id="pdfInput" accept="application/pdf">
         </label>
         <span id="pdfStatus" style="margin-left: 10px; font-size: 14px; color: #666;"></span>
@@ -108,7 +108,7 @@
     }
 
     // ==========================================
-    // 2. PDF解析ロジック (PDF.js)
+    // 2. PDF解析 ＆ AI生成ロジック
     // ==========================================
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
@@ -117,35 +117,57 @@
         if (!file) return;
 
         const status = document.getElementById('pdfStatus');
-        status.textContent = '解析中...';
+        status.textContent = '📄 PDFからテキストを読み込んでいます...';
 
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-        let addedCount = 0;
-        for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const text = textContent.items.map(item => item.str).join(' ');
+            let fullText = '';
+            // 先頭5ページ分のテキストを取得
+            for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                fullText += textContent.items.map(item => item.str).join(' ') + '\n';
+            }
 
-            // 簡易ルール抽出（英単語っぽい長さ4以上の文字列を抽出）
-            const words = text.match(/\b[A-Za-z]{4,}\b/g) || [];
-            const uniqueWords = [...new Set(words)];
+            status.textContent = '🤖 AIが単語帳を作成中... (少し時間がかかります)';
 
-            for (const word of uniqueWords.slice(0, 5)) { // 各ページ先頭5項目を登録
+            // Vercel Serverless API (/api/generate) を呼び出し
+            const response = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: fullText })
+            });
+
+            const result = await response.json();
+            if (result.error) {
+                alert('AI生成エラー: ' + result.error);
+                status.textContent = 'エラーが発生しました';
+                return;
+            }
+
+            // AIが生成した単語リストをIndexedDBへ保存
+            let addedCount = 0;
+            for (const item of result.cards) {
                 const card = {
                     id: 'card-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
-                    term: word,
-                    meaning: `資料 (${file.name}) から自動作成された抽出単語`,
+                    term: item.term,
+                    meaning: item.meaning + (item.example ? `\n\n例文: ${item.example}` : ''),
                     sourceName: file.name,
-                    sourcePage: i,
+                    sourcePage: 1,
                     createdAt: new Date().toISOString()
                 };
                 await saveCard(card);
                 addedCount++;
             }
+
+            status.textContent = `✨ 完了: AIが ${addedCount} 個の単語カードを自動作成しました！`;
+        } catch (err) {
+            console.error(err);
+            alert('処理中にエラーが発生しました');
+            status.textContent = '失敗しました';
         }
-        status.textContent = `完了: ${addedCount}個の単語候補を登録しました！`;
     });
 
     // ==========================================
@@ -168,7 +190,7 @@
                 <button class="delete-btn" onclick="deleteCard('${card.id}')">×</button>
                 <div class="card-term">${card.term}</div>
                 <div class="card-meaning">${card.meaning}</div>
-                <div class="card-source">${card.sourceName || '手動登録'} (P.${card.sourcePage || 1})</div>
+                <div class="card-source">${card.sourceName || '手動登録'}</div>
             `;
             grid.appendChild(cardEl);
         });
@@ -204,15 +226,24 @@
     }
 
     // ==========================================
-    // 4. PWA Service Worker 登録 & 初期化
+    // 4. Service Worker 登録 & 自動更新処理
     // ==========================================
     window.addEventListener('load', async () => {
         await initDB();
         renderCards();
 
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js').then(() => {
-                console.log('Service Worker 登録成功');
+            let refreshing = false;
+            // SW更新時に自動リロードして新しい画面へ切り替える
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!refreshing) {
+                    refreshing = true;
+                    window.location.reload();
+                }
+            });
+
+            navigator.serviceWorker.register('./sw.js').then((registration) => {
+                registration.update(); // 起動時に更新チェック
             }).catch(err => {
                 console.error('Service Worker 登録失敗:', err);
             });
