@@ -1,101 +1,223 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JEIMUN Master Vocabulary</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
-<!-- 外部のCSSファイルを読み込む -->
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUN ENGLISH - オフライン単語帳＆資料解析</title>
+    <link rel="manifest" href="manifest.json">
+    <!-- PDF.js ライブラリ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --border-color: #e1e4e8;
+        }
+        body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; background: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 20px; }
+        .panel { background: var(--card-bg); padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid var(--border-color); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .btn { background: var(--primary-color); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 4px; }
+        .btn-outline { background: transparent; color: var(--primary-color); border: 1px solid var(--primary-color); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 15px; }
+        .card { background: var(--card-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); position: relative; }
+        .card-term { font-size: 18px; font-weight: bold; color: var(--primary-color); margin-bottom: 5px; }
+        .card-meaning { font-size: 14px; margin-bottom: 10px; }
+        .card-source { font-size: 11px; color: #888; }
+        .delete-btn { position: absolute; top: 10px; right: 10px; background: #e74c3c; color: white; border: none; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-size: 12px; }
+        input[type="file"] { display: none; }
+        .file-label { display: inline-block; padding: 8px 16px; background: #34495e; color: white; border-radius: 6px; cursor: pointer; }
+    </style>
 </head>
 <body>
 
-<div class="sidebar">
-    <div class="brand">🌍 JEIMUN</div>
-    <div class="nav-menu" id="navMenu">
-        <div class="nav-item active" data-type="view" onclick="switchView('flashcards', this)">📚 Flashcards</div>
-        <div class="nav-item" data-type="view" onclick="switchView('dictionary', this)">🔍 Dictionary</div>
-        <div class="nav-item" data-type="view" onclick="switchView('cheatsheet', this)">📄 Cheat Sheet</div>
-        <div style="margin: 20px 0 10px 16px; font-size: 12px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Categories</div>
-        <div class="nav-item category-item active" onclick="selectCategory('All', this)">📁 All Categories</div>
-        <!-- Categories injected here -->
+<div class="container">
+    <header>
+        <h1>📚 MUN ENGLISH</h1>
+        <p>資料からつくる オフライン単語帳</p>
+    </header>
+
+    <!-- 操作パネル -->
+    <div class="panel">
+        <h3>1. 資料 (PDF) から取り込み</h3>
+        <label class="file-label">
+            📄 PDFファイルを選択
+            <input type="file" id="pdfInput" accept="application/pdf">
+        </label>
+        <span id="pdfStatus" style="margin-left: 10px; font-size: 14px; color: #666;"></span>
+
+        <h3 style="margin-top: 20px;">2. バックアップ・データ共有</h3>
+        <button class="btn btn-outline" onclick="exportJSON()">📥 単語帳をJSON保存</button>
+        <label class="file-label" style="background:#27ae60;">
+            📤 JSON読み込み
+            <input type="file" id="jsonInput" accept=".json" onchange="importJSON(event)">
+        </label>
     </div>
+
+    <!-- 単語一覧 -->
+    <h2>登録済み単語一覧</h2>
+    <div id="cardGrid" class="grid"></div>
 </div>
 
-<div class="main-content">
-    <div class="header">
-        <div class="header-title" id="headerTitle">Flashcards - All Categories</div>
-    </div>
+<script>
+    // ==========================================
+    // 1. IndexedDB データベース処理 (db.js 相当)
+    // ==========================================
+    const DB_NAME = 'MunEnglishDB';
+    const DB_VERSION = 1;
+    let db;
 
-    <!-- FLASHCARD VIEW -->
-    <div id="flashcardsView" class="view-section active">
-        <div class="flashcard-tools">
-            <div class="tool-group">
-                <select id="langMode" class="select-dropdown" onchange="updateCard()">
-                    <option value="en-ja">Front: English ➔ Back: Japanese</option>
-                    <option value="ja-en">Front: Japanese ➔ Back: English</option>
-                </select>
-            </div>
-            <div class="tool-group">
-                <button class="btn" onclick="shuffleCards()">🔀 Shuffle</button>
-            </div>
-        </div>
+    function initDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            request.onupgradeneeded = (e) => {
+                db = e.target.result;
+                if (!db.objectStoreNames.contains('cards')) {
+                    const store = db.createObjectStore('cards', { keyPath: 'id' });
+                    store.createIndex('term', 'term', { unique: false });
+                }
+            };
+            request.onsuccess = (e) => {
+                db = e.target.result;
+                resolve(db);
+            };
+            request.onerror = (e) => reject(e.target.error);
+        });
+    }
 
-        <div class="flashcard-container" onclick="flipCard()">
-            <div class="flashcard" id="flashcard">
-                <div class="flashcard-face card-front">
-                    <div id="card-front" class="card-word">Loading...</div>
-                    <div id="card-cat-front" class="card-cat">Category</div>
-                </div>
-                <div class="flashcard-face flashcard-back">
-                    <div id="card-back" class="card-meaning">Loading...</div>
-                    <div id="card-cat-back" class="card-cat">Category</div>
-                </div>
-            </div>
-        </div>
+    async function saveCard(card) {
+        const tx = db.transaction('cards', 'readwrite');
+        await tx.objectStore('cards').put(card);
+        renderCards();
+    }
 
-        <div class="card-nav">
-            <button class="btn" onclick="prevCard()">◀ Prev</button>
-            <div class="progress-text" id="progressText">1 / 0</div>
-            <button class="btn btn-primary" onclick="nextCard()">Next ▶</button>
-        </div>
-        <div class="keyboard-hint">Space to flip • Left/Right arrows to navigate</div>
-    </div>
+    async function getAllCards() {
+        return new Promise((resolve) => {
+            const tx = db.transaction('cards', 'readonly');
+            const request = tx.objectStore('cards').getAll();
+            request.onsuccess = () => resolve(request.result);
+        });
+    }
 
-    <!-- DICTIONARY VIEW -->
-    <div id="dictionaryView" class="view-section">
-        <input type="text" id="searchInput" class="search-bar" placeholder="Search in English or Japanese..." onkeyup="renderDictionary()">
-        <div class="dictionary-grid" id="dictGrid"></div>
-    </div>
+    async function deleteCard(id) {
+        const tx = db.transaction('cards', 'readwrite');
+        await tx.objectStore('cards').delete(id);
+        renderCards();
+    }
 
-    <!-- CHEAT SHEET VIEW -->
-    <div id="cheatsheetView" class="view-section" style="align-items: flex-start;">
-        <div class="flashcard-tools" style="max-width: 1000px; width: 100%; margin-bottom: 10px;">
-            <div class="tool-group">
-                <p style="color: var(--text-light); font-weight: 600;">Scroll to view all. Use the Print button to save as PDF or hand out to students.</p>
-            </div>
-            <div class="tool-group">
-                <button class="btn btn-primary" onclick="window.print()">🖨️ Print Cheat Sheet</button>
-            </div>
-        </div>
-        <div class="table-container">
-            <table class="cheat-sheet-table">
-                <thead>
-                    <tr>
-                        <th style="width: 35%;">English</th>
-                        <th style="width: 40%;">Japanese</th>
-                        <th style="width: 25%;">Category</th>
-                    </tr>
-                </thead>
-                <tbody id="cheatSheetBody">
-                    <!-- Table rows injected here -->
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
+    // ==========================================
+    // 2. PDF解析ロジック (PDF.js)
+    // ==========================================
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-<!-- 外部のJavaScriptファイルを読み込む -->
-<script src="script.js"></script>
+    document.getElementById('pdfInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const status = document.getElementById('pdfStatus');
+        status.textContent = '解析中...';
+
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        let addedCount = 0;
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const text = textContent.items.map(item => item.str).join(' ');
+
+            // 簡易ルール抽出（英単語っぽい長さ4以上の文字列を抽出）
+            const words = text.match(/\b[A-Za-z]{4,}\b/g) || [];
+            const uniqueWords = [...new Set(words)];
+
+            for (const word of uniqueWords.slice(0, 5)) { // 各ページ先頭5項目を登録
+                const card = {
+                    id: 'card-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+                    term: word,
+                    meaning: `資料 (${file.name}) から自動作成された抽出単語`,
+                    sourceName: file.name,
+                    sourcePage: i,
+                    createdAt: new Date().toISOString()
+                };
+                await saveCard(card);
+                addedCount++;
+            }
+        }
+        status.textContent = `完了: ${addedCount}個の単語候補を登録しました！`;
+    });
+
+    // ==========================================
+    // 3. 画面描画 & バックアップ機能
+    // ==========================================
+    async function renderCards() {
+        const cards = await getAllCards();
+        const grid = document.getElementById('cardGrid');
+        grid.innerHTML = '';
+
+        if (cards.length === 0) {
+            grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #888;">単語が登録されていません。PDFを取り込んでみましょう。</p>';
+            return;
+        }
+
+        cards.forEach(card => {
+            const cardEl = document.createElement('div');
+            cardEl.className = 'card';
+            cardEl.innerHTML = `
+                <button class="delete-btn" onclick="deleteCard('${card.id}')">×</button>
+                <div class="card-term">${card.term}</div>
+                <div class="card-meaning">${card.meaning}</div>
+                <div class="card-source">${card.sourceName || '手動登録'} (P.${card.sourcePage || 1})</div>
+            `;
+            grid.appendChild(cardEl);
+        });
+    }
+
+    async function exportJSON() {
+        const cards = await getAllCards();
+        const blob = new Blob([JSON.stringify(cards, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `MUN_English_Backup_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+    }
+
+    function importJSON(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const cards = JSON.parse(e.target.result);
+                for (const card of cards) {
+                    await saveCard(card);
+                }
+                alert('インポートが完了しました');
+            } catch (err) {
+                alert('JSONファイルの読み込みに失敗しました');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // ==========================================
+    // 4. PWA Service Worker 登録 & 初期化
+    // ==========================================
+    window.addEventListener('load', async () => {
+        await initDB();
+        renderCards();
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').then(() => {
+                console.log('Service Worker 登録成功');
+            }).catch(err => {
+                console.error('Service Worker 登録失敗:', err);
+            });
+        }
+    });
+</script>
 </body>
 </html>
